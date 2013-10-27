@@ -1,0 +1,1447 @@
+\documentclass[10pt]{book}
+\usepackage{palatino}
+\usepackage{latexsym,hyperref,amsmath, amsthm,amsfonts,amssymb}
+\usepackage{listings}
+\usepackage[super]{nth}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\newif\ifpdf
+\ifx\pdfoutput\undefined
+\pdffalse
+\else
+\pdfoutput=1
+\pdfcompresslevel=9
+\pdftrue
+\fi
+\ifpdf\pdfinfo{
+   /Title      (Libczrational: Rational Arithmetic)
+   /Author     (Christoph Zurnieden)            
+   /Keywords   (Mathematics Fractions Rational Arithmetic C C-99 Arbitrary Precision)
+}
+% \usepackage{thumbpdf}
+% don't forget 'thumbpdf.pl --antialias 4 $this_texfile.pdf'
+\fi
+\newcommand{\aname}[1]{{\scshape{#1}}}
+\newcommand{\fname}[1]{\texttt{#1}}
+\newcommand{\sbinom}[2]{\genfrac{[}{]}{0pt}{}{{#1}}{#2}}
+\newcommand{\field}[1]{\mathbb{#1}}
+\newcommand{\N}{\field{N}}
+\newcommand{\Z}{\field{Z}}
+\newcommand{\Q}{\field{Q}}
+\newcommand{\R}{\field{R}}
+\newcommand{\C}{\field{C}}
+
+\newcommand{\code}[1]{{\texttt{#1}}}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{corr}{Corollary}
+\theoremstyle{definition}
+\newtheorem{defn}{Definition}[section]
+\newtheorem{exmpl}{Example}[section]
+\theoremstyle{remark}
+\newtheorem{rem}{Remark}[section]
+\newtheorem*{notation}{Notation}
+
+\providecommand{\abs}[1]{\lvert#1\rvert}
+\providecommand{\norm}[1]{\lVert#1\rVert}
+\providecommand{\floor}[1]{\lfloor#1\rfloor}
+\providecommand{\ceil}[1]{\lceil#1\rceil}
+\providecommand{\SET}[1]{\mathbf{#1}}
+
+
+\DeclareMathOperator{\D}{d}
+\DeclareMathOperator{\AND}{\wedge}
+\DeclareMathOperator{\OR}{\vee}
+\DeclareMathOperator{\XOR}{\otimes}
+\DeclareMathOperator{\cinv}{inv}
+\DeclareMathOperator{\odd}{odd}
+\DeclareMathOperator{\even}{even}
+
+\DeclareMathOperator{\DOM}{dom}
+\DeclareMathOperator{\RAN}{ran}
+\DeclareMathOperator{\FIELD}{field}
+
+\DeclareMathOperator{\GCD}{gcd}
+
+\newcommand{\keywords}[1]{{\bfseries Keywords: }#1}
+
+\newcommand{\notabene}[1]{\
+\begin{center}\
+\begin{minipage}[t]{.9\linewidth}\
+{\bfseries{NB:} }#1\
+\end{minipage}
+\end{center}
+}
+
+% inverse diagonal dots. Just \ddots with the boxes exchanged
+% If you want a more refined version try mathdots.sty
+% by Daniel H. Luecking at http://comp.uark.edu/~luecking/tex/mathdots.sty
+\def\iddots{\mathinner{\mkern1mu\raise\p@\hbox{.}
+\mkern2mu\raise4\p@\hbox{.}
+\mkern2mu\raise7\p@\vbox{\kern7\p@\hbox{.}}
+\mkern1mu}}
+
+\begin{document}
+\title{Libczrational: Rational arithmetic}
+\author{Christoph Zurnieden\\
+        \small{\texttt{$<$czurnieden@gmx.de$>$}}}
+\date{Last change: \today}
+\maketitle
+\lstset{language=C,frame=lines}
+\tableofcontents
+\chapter*{Introduction}
+Why another one? A good question. The GMP library over at \url{http://gmp.org}
+offers an excellent and very fast implementation of rational arithmetic, just to
+name one. The GMP library is also a good example in the way it is implemented
+and licensed: it is highly optimized code, hence quite convoluted and is
+published under the GPL. The former restricts the legibility quite
+drastically while the latter makes it unusable for some projects.
+
+While the author cannot care less for the latter but the former is a massive
+hindrance to the progress of computer programs. Some people might think that
+such a sieve is useful to get the best out of the process but the price is high.
+Trying to fix code that is artificially, or worse, carelessly made illegible
+needs more time, which costs money, and  higher trained people, which costs
+even more money. All to fix a thing that might be a small typo, easily found
+by any secretary armed with a spelling dictionary if the code were not so, let's
+be blunt here, bloated.
+
+So in the good old tradition, started by Tom St Denis, this library will get
+explained in detail and gets a very liberal license.
+
+Sadly, due to a changed legislation, it is not possible for the author to put
+it into Public Domain anymore. The second best thing the lawyers warmly
+recommended is the one used for libczrational which consists basically of
+a waiver, the author's name and the rule to include the licence if anything,
+source-code or binaries get redistributed.
+\notabene{the use of the underlying mathetics is sparse in this text, so for a quite
+thorough but still short overview see
+\url{http://en.wikipedia.org/wiki/Fraction_\%28mathematics\%29} }
+
+\chapter{Foundation}
+\section{The Main Data Type and the Handling of it}
+The data type must be able to hold the numerator, the denominator, and the sign
+of the rational number. The data types of the numerator and denominator
+respectively are the arbitrary precision integers offered by \aname{Libtommath}
+(\url{http://libtom.org}). The data type for the sign is an \lstinline!int! because
+it uses the macros \lstinline!MP_ZPOS! and \lstinline!MP_NEG! shamelessly stolen from
+\aname{Libtommath}. This results in the following \lstinline!struct!:
+  \begin{center}
+    \begin{lstlisting}[caption={Basic data type},label=structmprat]
+typedef struct  {
+    int sign;
+    mp_int numerator;
+    mp_int denominator;
+}mp_rat;
+    \end{lstlisting}
+  \end{center}
+There are exactly infinite ways to express unity and zero in the form of a
+fraction which raises the need for some special numbers to represent those.
+To make things simple, zero is represented as $tfrac{0}{1}$ and unity by
+$tfrac{1}{1}$, both with a positive sign.
+
+Under normal circumstances a division by zero would raise an error which itself
+would cause a full stop. That is not the case with fractions, where
+division-by-zero as an intermediate results in the code might be acceptable
+if not needed. The special number for division-by-zero is $tfrac{0}{0}$ and
+the error returned is defined as the last three digit prime.
+ \begin{center}
+    \begin{lstlisting}[caption={Division by Zero Error},label=divbyzeroerror]
+#define MPQ_DIVISION_BY_ZERO -997
+    \end{lstlisting}
+  \end{center}
+The \lstinline!mp_int! data types need to get initialized, so do the
+\lstinline!mp_rat! data types. Most of the necessary framework gets already done
+by \aname{Libtommath} which reduces the amount of work left to initialize
+the two big integers for the numerator and denominator respectively.
+ \begin{center}
+    \begin{lstlisting}[caption={Initialize a single Rational},label=initrat]
+int mpq_init(mp_rat *a){
+    int e;
+    if( (e = mp_init_multi(&a->numerator,
+                           &a->denominator,NULL) ) 
+                                          != MP_OKAY){
+      return e;
+    }
+    a->sign = MP_ZPOS;
+    return MP_OKAY;
+}
+    \end{lstlisting}
+  \end{center}
+This initialization allocates memory which has to be given back to the operating
+system after use. We can use the functions of \aname{Libtommath} again.
+ \begin{center}
+    \begin{lstlisting}[caption={Free the Memory},label=freerat]
+void mpq_clear(mp_rat *a){
+    mp_clear_multi(&a->numerator,&a->denominator,NULL);
+    a->sign = MP_ZPOS;
+}
+    \end{lstlisting}
+  \end{center}
+This function does not return anything but the operating system react quite
+clear if somebody tries to free memory that cannot be set free\footnote{It is
+in most cases caused by un-allocated memory, e.g.: use of the memory outside of
+and array. Such code might work itself (\lstinline!malloc()! might allocate
+full pages only), just when trying to free the memory gets one in trouble.}.
+
+\aname{Libtommath} offers shortcuts for initializing and clearing multiple
+instances at once. That is a good idea. The original at \aname{Libtommath}
+uses a simple loop with \lstinline!va_list! so stealing the code and replacing
+\lstinline!mp_init! with \lstinline!mpq_init! does it.
+
+And unashamed as we are with handling stolen goods we keep the comments, too.
+ \begin{center}
+    \begin{lstlisting}[caption={Initializing Multiple Instances},label=initratmult]
+int mpq_init_multi(mp_rat *mp, ...)
+{   
+     /* Assume ok until proven otherwise */
+    mp_err res = MP_OKAY;
+    /* Number of ok inits */
+    int n = 0;
+    mp_rat* cur_arg = mp;
+    va_list args;
+     /* init args to next argument from caller */
+    va_start(args, mp);
+    while (cur_arg != NULL) {
+        if (mpq_init(cur_arg) != MP_OKAY) {
+            /* Oops - error! Back-track and mp_clear what
+               we already succeeded in init-ing, then
+               return error.
+            */
+            va_list clean_args;
+
+            /* end the current list */
+            va_end(args);
+
+            /* now start cleaning up */
+            cur_arg = mp;
+            va_start(clean_args, mp);
+            while (n--) {
+                mpq_clear(cur_arg);
+                cur_arg = va_arg(clean_args, mp_rat*);
+            }
+            va_end(clean_args);
+            res = MP_MEM;
+            break;
+        }
+        n++;
+        cur_arg = va_arg(args, mp_rat*);
+    }
+    va_end(args);
+    /* Assumed ok, if error flagged above. */
+    return res;
+}
+    \end{lstlisting}
+  \end{center}
+Clearing multiple instances does the same but way shorter.
+ \begin{center}
+    \begin{lstlisting}[caption={Clearing Multiple Instances},label=clearratmult]
+void mpq_clear_multi(mp_rat *mp, ...)
+{
+    mp_rat* next_mp = mp;
+    va_list args;
+    va_start(args, mp);
+    while (next_mp != NULL) {
+        mpq_clear(next_mp);
+        next_mp = va_arg(args, mp_rat*);
+    }
+    va_end(args);
+}
+    \end{lstlisting}
+  \end{center}
+All the functions in this section are in the file \code{chores.c}.
+\section{On Signs}
+Ignoring a full half of the infinite number line would be a large waste of
+fractions, wouldn't it? To avoid such an immense ecological disaster we
+introduced the member \lstinline!sign! in the structure \lstinline!mp_rat!.
+We can do a lot with signs, not so much with the signum. The little we can do is
+setting it, for example.
+ \begin{center}
+    \begin{lstlisting}[caption={Set Sign of Rational},label=setsignrat]
+int mpq_set_sign(mp_rat *a, int sign){
+  int sgn;
+  sgn = a->sign;
+  a->sign = (sign < 0 || sign == MP_NEG)?MP_NEG:MP_ZPOS;
+  a->numerator.sign = MP_ZPOS;
+  a->denominator.sign = MP_ZPOS;
+  return sgn;
+}
+    \end{lstlisting}
+  \end{center}
+This function does not return an error but the old sign. It has another specialty
+in that it accepts not only the macros \lstinline!MP_ZPOS! and \lstinline!MP_NEG!
+but accepts a negative argument and sets the sign accordingly. This should be
+done with a lot of care because the current version of \aname{Libtommath} defines
+ \lstinline!MP_ZPOS = 0! and \lstinline!MP_NEG = 1!!
+
+Getting the sign of a rational \lstinline!a! is done simply by
+checking \lstinline!a->sign! but for the sake of symmetry we use a full function
+for it.
+ \begin{center}
+    \begin{lstlisting}[caption={Get Sign of Rational},label=getsignrat]
+int mpq_get_sign(mp_rat *a){
+  return a->sign;
+}
+    \end{lstlisting}
+  \end{center}
+Another useful function is the reversal of the sign.
+ \begin{center}
+    \begin{lstlisting}[caption={},label=]
+int mpq_neg(mp_rat *a){
+  int sgn;
+  if(mp_iszero(&a->numerator)){
+    mpq_set_sign(a,MP_ZPOS);
+    return MP_OKAY;
+  }
+  sgn =  mpq_get_sign(a);
+  sgn = (sgn == MP_NEG)?MP_ZPOS:MP_NEG;
+  a->numerator.sign = MP_ZPOS;
+  a->denominator.sign = MP_ZPOS;
+  return mpq_set_sign(a, sgn);
+}
+    \end{lstlisting}
+  \end{center}
+If some functions want to treat the quotients individually and do not want to
+keep the sign over long streaks of code a function to normalize the sign might
+be of some use.
+ \begin{center}
+    \begin{lstlisting}[caption={Nomalize Sign},label=normsign]
+void mpq_normalize_sign(mp_rat *a){
+  int sign_n, sign_d;
+  
+  sign_n = a->numerator.sign;
+  sign_d = a->denominator.sign;
+  a->sign = (sign_n != sign_d)?MP_NEG:MP_ZPOS;
+  a->numerator.sign = MP_ZPOS;
+  a->denominator.sign = MP_ZPOS;
+}
+    \end{lstlisting}
+  \end{center}
+It takes advantage the old rules $-1\cdot 1= -1$, $1\cdot 1=1$, and
+$-1\cdot -1= 1$ wich are the same for division. It must be noted that this
+function ignores the original sign.
+
+The above functions are in the file \code{signum.c}.
+\chapter{Checks and other Balances}
+There are not much checks that are much more than so called syntactic sugar
+available but all enhance the readbility of the code.
+
+The most useful functions the author deemed as such are the following.
+
+The check for zero is simple if we remeber that zero has the special number
+$\tfrac{0}{1}$.
+ \begin{center}
+    \begin{lstlisting}[caption={Check for Zero},label=checkzero]
+int mpq_iszero(mp_rat *a){
+   if(     mp_iszero(&a->numerator)
+       &&  mp_isone(&a->denominator)){
+      return MP_YES;
+     }
+   return MP_NO;
+}
+    \end{lstlisting}
+  \end{center}
+The function \lstinline!mp_isone()! is not in the current version of
+\aname{Libtommath} but is easily implemented as a short macro.
+ \begin{center}
+    \begin{lstlisting}[caption={Test a mp\_int for Unity},label=mpinttestone]
+#define mp_isone(a) (((a)->used == 1 && (a)->dp[0] == 1)\
+                                       ? MP_YES : MP_NO)
+    \end{lstlisting}
+  \end{center}
+To check for unity we could use the special number $\tfrac{1}{1}$ but it makes
+more sense to implement this function more generally and check for the equality
+of numerator and denominator respectively.
+ \begin{center}
+    \begin{lstlisting}[caption={test for Unity},label=checkforone]
+int mpq_isone(mp_rat *a){
+   if(mp_cmp(&a->numerator,&a->denominator) == MP_EQ){
+      return MP_YES;
+     }
+   return MP_NO;
+}
+    \end{lstlisting}
+  \end{center}
+This function does not check the sign, only if numerator and denominator are
+equal!
+
+It might be necessary to test for the special number  $\tfrac{0}{0}$ denoting
+the division by zero.
+ \begin{center}
+    \begin{lstlisting}[caption={Test for a Division-By-Zero-Number},label=testdevzeronum]
+int mpq_isundefined(mp_rat *a){
+   if(     mp_iszero(&a->numerator)
+       &&  mp_iszero(&a->denominator)){
+      return MP_YES;
+     }
+   return MP_NO;
+}
+    \end{lstlisting}
+  \end{center}
+What if the denominator is one? Well, than it is an integer.
+ \begin{center}
+    \begin{lstlisting}[caption={Test for an Integer},label=testforint]
+int mpq_isinteger(mp_rat *a){
+  if(mp_isone(&a->denominator)){
+    return MP_YES;
+  }
+   return MP_NO;
+}
+    \end{lstlisting}
+  \end{center}
+And another one to test for negativity.
+ \begin{center}
+    \begin{lstlisting}[caption={Test for Negativity},label=testforneg]
+int mpq_isneg(mp_rat *a){
+  return ((a->sign == MP_NEG)?MP_YES:MP_NO);
+}
+    \end{lstlisting}
+  \end{center}
+The most work gets done in the function to compare two fractions and decide
+which one is smaller, if any. But how do we compare the size of two fractions?
+If we had a floating point data type we could just divide and compare the
+resulting floats. We have no such data types and hence cannot do that but we
+can multiply and there is no need to do the full algorithm, which would inolve
+finding the leastcommon multiple to calculate the common denominator,
+cross-multiplying is sufficient. These multiplications can get very large, very
+fast so it is a good idea to compare the magnitudes first.
+This can be done by adding the digits. Either
+the digits of the big number of the binary digits themself, the latter being
+finer grained but the former has been chosen.
+Further shortcuts are possible, if the numbers are the same (actually if the
+pointers point to the same part of the memory), the signs are different, one
+number is zero but not the other, and if both numbers are actual integers.
+ \begin{center}
+    \begin{lstlisting}[caption={Compare Two rationals},label=comprats]
+int mpq_cmp(mp_rat *a, mp_rat *b){
+  mp_int p1,p2;
+  int e,wnuma,wdena,wnumb,wdenb,s1,s2;
+
+  /* a == b, actually the very same number */
+  if(a == b){
+    return MP_EQ;
+  }
+  /* a < b */
+  if(a->sign == MP_NEG && b->sign == MP_ZPOS){
+    return MP_LT;
+  }
+  /* a > b */
+  if(a->sign == MP_ZPOS && b->sign == MP_NEG){
+    return MP_GT;
+  }
+  /* some more shortcuts */
+  if(mpq_iszero(a)){
+    /* a == b (both zero) */
+    if(mpq_iszero(b)){
+      return MP_EQ;
+    }
+    /* a < b */
+    if(b->sign == MP_ZPOS){
+      return MP_LT;
+    }
+    /* a > b */
+    return MP_GT;
+  }
+  if(mpq_iszero(b)){
+    /* a > b */
+    if(a->sign == MP_ZPOS){
+      return MP_GT;
+    }
+    /* a < b */
+    return MP_LT;
+  }
+  if(mpq_isinteger(a) && mpq_isinteger(b)){
+    return mp_cmp(&a->numerator,&b->numerator);
+  }
+
+  /*
+     We can use a rough approximation of the result
+     because we are only interested in the magnitudes.
+   */
+  wnuma = (&a->numerator)->used;
+  wdena = (&a->denominator)->used;
+  wnumb = (&b->numerator)->used;
+  wdenb = (&b->denominator)->used;
+  s1 = wnuma + wdenb;
+  s2 = wnumb + wdena;
+  if(s1 < s2 - 1){
+    return ( (a->sign == MP_NEG)?MP_ZPOS: MP_NEG);
+  }
+  if(s2 < s1 - 1){
+    return ( (a->sign == MP_NEG)?MP_NEG: MP_ZPOS);
+  }
+  /* This is gonna be brutal, so don't use cmp() frivolously! */
+  mp_init_multi(&p1,&p2,NULL);
+  if( (e = mp_mul(&a->numerator,
+                  &b->denominator,&p1)) != MP_OKAY){
+    return e;
+  }
+  if( (e = mp_mul(&b->numerator,
+                  &a->denominator,&p2)) != MP_OKAY){
+    mp_clear(&p2);
+    return e;
+  }
+
+  e = mp_cmp(&p1,&p2);
+  mp_clear_multi(&p1,&p2,NULL);
+  if(a->sign == MP_NEG){
+    return ( (e == MP_ZPOS)?MP_NEG: MP_ZPOS );
+  }
+  return e;
+}
+    \end{lstlisting}
+  \end{center}
+All of the functions above are in the file \code{checks.c}.
+\chapter{Basic Arithmetic}
+No that we have all tools together in a nicely wrapped toolbox we should start
+using them for something useful. All of the functions described in this chapter
+are in file \code{exact\_arithmetic.c}.
+\section{Addition}
+The addition of two fractions is done by computing the LCD ({\it L}owest
+{\it C}ommon {\it D}enominator) which is the LCM ({\it L}east
+{\it C}ommon {\it M}ultiplicator), dividing it by one denominator and multiply the
+result with the numerator of the same fraction, rinse and repeat. The actual
+code might make it clearer.
+ \begin{center}
+    \begin{lstlisting}[caption={Addition},label=addrat]
+int mpq_add(mp_rat *a, mp_rat *b, mp_rat *c){
+  int e;
+  mp_int lcm,tmp1,tmp2,tmp3,tmp4;
+  if(mp_iszero(&a->numerator)){
+    if( (e = mpq_copy(b,c) ) != MP_OKAY){
+      return e;
+    }
+    return MP_OKAY;
+  }
+  if(mp_iszero(&b->numerator)){
+    if( (e = mpq_copy(a,c) ) != MP_OKAY){
+      return e;
+    }
+    return MP_OKAY;
+  }
+    /* let libtommath take care of the signs */
+    (&a->numerator)->sign = a->sign;
+    (&b->numerator)->sign = b->sign;
+  if(mpq_isinteger(a) && mpq_isinteger(a) ){
+    if( (e = mp_add(&a->numerator,&b->numerator,
+                    &c->numerator) ) != MP_OKAY){
+      return e;
+    }
+    c->sign = (&c->numerator)->sign;
+    (&a->numerator)->sign = MP_ZPOS;
+    (&b->numerator)->sign = MP_ZPOS;
+    (&c->numerator)->sign = MP_ZPOS;
+    (&c->denominator)->sign = MP_ZPOS;
+    if( (e = mp_set_int(&c->denominator,1) ) != MP_OKAY){
+      return e;
+    }
+    return MP_OKAY;
+  }
+
+  //if(mpq_isinteger(a)){}
+  //if(mpq_isinteger(b)){}
+  mp_init_multi(&lcm,&tmp1,&tmp2,&tmp3,&tmp4,NULL);
+  /* lcm(a,b)*/
+  if( (e = mp_lcm(&a->denominator,
+                  &b->denominator,&lcm) ) != MP_OKAY){
+    return e;
+  }
+  if( (e = mp_div(&lcm,&a->denominator,
+                       &tmp1,NULL) ) != MP_OKAY){
+    return e;
+  }
+  if( (e = mp_mul(&tmp1,&a->numerator,
+                        &tmp2) ) != MP_OKAY){
+    return e;
+  }
+  if( (e = mp_div(&lcm,&b->denominator,
+                       &tmp3,NULL) ) != MP_OKAY){
+    return e;
+  }
+  if( (e = mp_mul(&tmp3,&b->numerator,
+                        &tmp4) ) != MP_OKAY){
+    return e;
+  }
+  if( (e = mp_add(&tmp2,&tmp4,
+                        &c->numerator) ) != MP_OKAY){
+    return e;
+  }
+  if( (e =  mp_copy(&lcm,&c->denominator) ) != MP_OKAY){
+    return e;
+  }
+    c->sign = (&c->numerator)->sign;
+    (&a->numerator)->sign = MP_ZPOS;
+    (&b->numerator)->sign = MP_ZPOS;
+   if( (e = mpq_reduce(c) ) != MP_OKAY){
+      return e;
+   }
+  return MP_OKAY;
+}
+    \end{lstlisting}
+  \end{center}
+The shortcuts cut in when one of the two rationals is zero and when both are
+integers (optional also if only one is integer, not implemented here).
+The excessive use of temporary variables is not necessary and had only been
+done to better readability. The functions \lstinline!reduce()! is treated
+in much detail at the end of this chapter.
+\section{Subtraction}
+Subtraction is, who would have thought, just the opposite of addition.
+ \begin{center}
+    \begin{lstlisting}[caption={Subtraction},label=subrat]
+int mpq_sub(mp_rat *a, mp_rat *b, mp_rat *c){
+  int e;
+  mp_int lcm,tmp1,tmp2,tmp3,tmp4;
+  if(mp_iszero(&a->numerator)){
+    if( (e = mpq_copy(b,c) ) != MP_OKAY){
+      return e;
+    }
+    mpq_set_sign(c,MP_NEG);
+    return MP_OKAY;
+  }
+  if(mp_iszero(&b->numerator)){
+    if( (e = mpq_copy(a,c) ) != MP_OKAY){
+      return e;
+    }
+    return MP_OKAY;
+  }
+    /* let libtommath take care of the signs */
+    (&a->numerator)->sign = a->sign;
+    (&b->numerator)->sign = b->sign;
+  if(mpq_isinteger(a) && mpq_isinteger(a) ){
+    if( (e = mp_sub(&a->numerator,
+                    &b->numerator,&c->numerator) ) != MP_OKAY){
+      return e;
+    }
+    c->sign = (&c->numerator)->sign;
+    (&a->numerator)->sign = MP_ZPOS;
+    (&b->numerator)->sign = MP_ZPOS;
+    (&c->numerator)->sign = MP_ZPOS;
+    (&c->denominator)->sign = MP_ZPOS;
+    if( (e = mp_set_int(&c->denominator,1) ) != MP_OKAY){
+      return e;
+    }
+    return MP_OKAY;
+  }
+
+  //if(mpq_isinteger(a)){}
+  //if(mpq_isinteger(b)){}
+  mp_init_multi(&lcm,&tmp1,&tmp2,&tmp3,&tmp4,NULL);
+  /* lcm(a,b)*/
+  if( (e = mp_lcm(&a->denominator,
+                  &b->denominator,&lcm) ) != MP_OKAY){
+    return e;
+  }
+  if( (e = mp_div(&lcm,&a->denominator,
+                       &tmp1,NULL) ) != MP_OKAY){
+    return e;
+  }
+  if( (e = mp_mul(&tmp1,&a->numerator,
+                        &tmp2) ) != MP_OKAY){
+    return e;
+  }
+  if( (e = mp_div(&lcm,&b->denominator,
+                       &tmp3,NULL) ) != MP_OKAY){
+    return e;
+  }
+  if( (e = mp_mul(&tmp3,&b->numerator,
+                        &tmp4) ) != MP_OKAY){
+    return e;
+  }
+  if( (e = mp_sub(&tmp2,&tmp4,
+                        &c->numerator) ) != MP_OKAY){
+    return e;
+  }
+  if( (e =  mp_copy(&lcm,&c->denominator) ) != MP_OKAY){
+    return e;
+  }
+    c->sign = (&c->numerator)->sign;
+    (&a->numerator)->sign = MP_ZPOS;
+    (&b->numerator)->sign = MP_ZPOS;
+   if( (e = mpq_reduce(c) ) != MP_OKAY){
+      return e;
+   }
+  return MP_OKAY;
+}
+    \end{lstlisting}
+  \end{center}
+\section{Multiplication}
+Multplication is a bit boring, just multiply one numerator with the other and
+one denominator with the other and don't forget to reduce the result.
+ \begin{center}
+    \begin{lstlisting}[caption={Multiplication},label=mulrat]
+int mpq_mul(mp_rat *a, mp_rat *b, mp_rat *c){
+  int e;
+  if(mp_iszero(&a->numerator) || mp_iszero(&b->numerator)){
+    if( (e = mpq_set_int(c,0,1) ) != MP_OKAY){
+      return e;
+    }
+    c->sign = MP_ZPOS;
+    return MP_OKAY;
+  }
+
+  if( (e = mp_mul(&a->numerator,&b->numerator,
+                                &c->numerator) ) != MP_OKAY){
+    return e;
+  }
+  if( (e = mp_mul(&a->denominator,&b->denominator,
+                                  &c->denominator) ) != MP_OKAY){
+    return e;
+  }
+  if( (e = mpq_reduce(c) ) != MP_OKAY){
+    return e;
+  }
+  c->sign = (a->sign != b->sign)?MP_NEG:MP_ZPOS;
+  return MP_OKAY;
+}
+    \end{lstlisting}
+  \end{center}
+\section{Division}
+Division is even simpler: jsut multiply with the reciprocal of on of the
+fractions.
+ \begin{center}
+    \begin{lstlisting}[caption={Division},label=divrat]
+int mpq_div(mp_rat *a, mp_rat *b, mp_rat *c){
+  int e;
+  if(mp_iszero(&a->numerator)){
+    if( (e = mpq_set_int(c,0,1) ) != MP_OKAY){
+      return e;
+    }
+    return MP_OKAY;
+  }
+  if(mp_iszero(&b->numerator)){
+    return MPQ_DIVISION_BY_ZERO;
+  }
+  if( (e = mpq_inverse(b) ) != MP_OKAY){
+    return e;
+  }
+  if( (e = mpq_mul(a,b,c) ) != MP_OKAY){
+    return e;
+  }
+  if( (e = mpq_inverse(b) ) != MP_OKAY){
+    return e;
+  }
+  if( (e = mpq_reduce(c) ) != MP_OKAY){
+    return e;
+  }
+  c->sign = (a->sign != b->sign)?MP_NEG:MP_ZPOS;
+  return MP_OKAY;
+}
+    \end{lstlisting}
+  \end{center}
+\section{A Rational to the Power of a Small Number}
+%TODO: explain and do optimizations by doing GCD first
+A rational to the power of another rational is equivalent to extracting a root,
+so it makes sense to treat integer exponents separately. The reason for this
+bold statement lies in the following equalities:
+\begin{equation}
+{ \left( \frac{p}{q} \right) }^{ \left( {\dfrac{a}{b}} \right)} 
+    = \frac{ p^{\left({\dfrac{a}{b}}\right)} }
+           { q^{\left({\dfrac{a}{b}}\right)} }
+\end{equation}
+Now that we can look at one part of the fraction separately, let's take the
+numerus as the example.
+\begin{align}
+   p^\frac{a}{b} &= p^{\left(a + \frac{1}{b}\right)}\\
+                 &= p^a \cdot p^\frac{1}{b}
+\end{align}
+We can easily see that we are able to treat integral exponents separate from
+rational exponents.
+
+The code used here takes native integers only as an exponent, not big integers.
+It is an arbitrary limit because the power function in \aname{Libtommath}
+has the same limit. The author wrote an extended power function which is made
+available in his fork of \code{libtommath} in the file \code{bn\_mp\_expt.c} and
+is used here in a branch when the exponent gets larger in size than
+\lstinline!(1lu)<<DIGIT_BITS! and also in the following section.
+
+Some shortcuts are possible following the rules of exponentiation for $x\in\N$:
+\begin{align}
+   0^x &= 0 \quad\text{with}\quad x\not= 0 \\
+   1^x &= 1 \\
+  x^0 &= 1 \quad\text{with}\quad x\not= 0\\
+{ \left(\frac{p}{q}\right)}^x &= \begin{cases}\dfrac{p^x}{q^x}  \quad\text{if}\quad x\ge 0\\
+                                 \dfrac{q^x}{p^x}  \quad\text{if}\quad x< 0
+                     \end{cases}
+\end{align}
+Which results in the code below
+ \begin{center}
+    \begin{lstlisting}[caption={Exponentiation by Integer},label=powint]
+int mpq_pow_d(mp_rat *a, long d, mp_rat *c){
+  int e;
+  long abs_d;
+  mp_int temp;
+
+  /* 0^x = 0; x!=0 */
+  if(mpq_iszero(a)){
+    if(d == 0){
+      if( (e = mpq_set_int(c,0,0) ) != MP_OKAY){
+        return e;
+      }
+      return MPQ_DIVISION_BY_ZERO;
+    }
+    if( (e = mpq_set_int(c,0,1) ) != MP_OKAY){
+      return e;
+    }
+    return MP_OKAY;
+  }
+  /* 1^ x = 1 */
+  if(mpq_isone(a)){
+    /* mpq_set_* ignore signs. Behaviour may change
+       in the future */
+    if( (e = mpq_set_int(c,1,1) ) != MP_OKAY){
+      return e;
+    }
+    /* (-1)^x = 1 if x is even, -1 otherwise */
+    if(mpq_isneg(a) && labs(d)&0x1){
+      c->sign = MP_NEG;
+    }
+    return MP_OKAY;
+  }
+
+  /* x^0 = 1 ; x != 0*/
+  if(d == 0){
+    if(mpq_iszero(a)){
+      if( (e = mpq_set_int(c,0,0) ) != MP_OKAY){
+        return e;
+      }
+      return MPQ_DIVISION_BY_ZERO;
+    }
+    if( (e = mpq_set_int(c,1,1) ) != MP_OKAY){
+      return e;
+    }
+    c->sign = MP_ZPOS;
+    return MP_OKAY;
+  }
+  abs_d = labs(d);
+  /* it is mp_expt_d (mp_int * a, mp_digit b, mp_int * c),
+     hence the limit */
+  if(abs_d < DIGIT_SIZE){
+    if( (e = mp_expt_d (&a->numerator, abs_d,
+                        &c->numerator) ) != MP_OKAY){
+      return e;
+    }
+    if( (e = mp_expt_d (&a->denominator, abs_d, 
+                        &c->denominator) ) != MP_OKAY){
+      return e;
+    }
+  }
+  else{
+    mp_init(&temp);
+    if( (e = mp_set_int(&temp,
+                       (unsigned long)abs_d) ) != MP_OKAY){
+      return e;
+    }
+    /* There is no function mp_expt()? Oh my ... */
+    if( (e = mp_expt(&a->numerator, &temp, 
+                     &c->numerator) ) != MP_OKAY){
+      return e;
+    }
+    if( (e = mp_expt(&a->denominator, &temp, 
+                     &c->denominator) ) != MP_OKAY){
+      return e;
+    }
+  }
+  /* (p/q)^x = (p^x)/(q^x) with integer x and x > 0,
+     (q^x)/(p^x) with x < 0*/
+  if(d < 0){
+    mp_exch(&c->numerator,&c->denominator);
+  }
+  /* set sign according to rule described above */
+  if(mpq_isneg(a) && labs(d)&0x1){
+     c->sign = MP_NEG;
+  }
+   return MP_OKAY;
+}
+    \end{lstlisting}
+  \end{center}
+
+\section{A Rational to the Power of a Big Number}
+The function with a big integer as the exponent is simpler, of course.
+ \begin{center}
+    \begin{lstlisting}[caption={Big Number Exponent},label=powbigint]
+int mpq_pow_bigd(mp_rat *a, mp_int *d, mp_rat *c){
+  int e;
+  long abs_d;
+  mp_int temp;
+
+  /* 0^x = 0; x!=0 */
+  if(mpq_iszero(a)){
+    if(d == 0){
+      if( (e = mpq_set_int(c,0,0) ) != MP_OKAY){
+        return e;
+      }
+      return MPQ_DIVISION_BY_ZERO;
+    }
+    if( (e = mpq_set_int(c,0,1) ) != MP_OKAY){
+      return e;
+    }
+    return MP_OKAY;
+  }
+  /* 1^ x = 1 */
+  if(mpq_isone(a)){
+    if( (e = mpq_set_int(c,1,1) ) != MP_OKAY){
+      return e;
+    }
+    /* (-1)^x = 1 if x is even, -1 otherwise */
+    if(mpq_isneg(a) && mp_isodd(d)){
+      c->sign = MP_NEG;
+    }
+    return MP_OKAY;
+  }
+  /* x^0 = 1 ; x != 0*/
+  if(mp_iszero(d) ){
+    if(mpq_iszero(a)){
+      if( (e = mpq_set_int(c,0,0) ) != MP_OKAY){
+        return e;
+      }
+      return MPQ_DIVISION_BY_ZERO;
+    }
+    if( (e = mpq_set_int(c,1,1) ) != MP_OKAY){
+      return e;
+    }
+    c->sign = MP_ZPOS;
+    return MP_OKAY;
+  }
+  if( (e = mp_expt(&a->numerator, &temp, 
+                   &c->numerator) ) != MP_OKAY){
+     return e;
+  }
+  if( (e = mp_expt(&a->denominator, &temp,
+                   &c->denominator) ) != MP_OKAY){
+     return e;
+  }
+  if(d->sign == MP_NEG){
+    mp_exch(&c->numerator,&c->denominator);
+  }
+  if(mpq_isneg(a) && mp_isodd(d)){
+     c->sign = MP_NEG;
+  }
+  return MP_OKAY;
+}
+    \end{lstlisting}
+  \end{center}
+\section{Reducing}
+Reducing a fraction is done with the help of the GCD ({\scshape G}reatest
+{\scshape C}ommon {\scshape D}ivisor). To get the irreducible form $\tfrac{p}{q}$
+from a fraction $\tfrac{a}{b}$ we need to do the following:
+\begin{equation}
+\frac{p}{q} = \genfrac{}{}{1.1pt}{}{\quad\dfrac{a}{\GCD\left(a,b\right)}\quad}
+                   {\dfrac{b}{\GCD\left(a,b\right)}}
+\end{equation}
+Several shortcuts are possible based on this equality.
+\begin{equation}
+\frac{p}{q} = \begin{cases}
+               0&\quad\text{if}\quad a = 0\\
+               1&\quad\text{if}\quad a = b\\[1.5\jot]
+               \dfrac{a}{b}&\quad\text{if}\quad
+                          b = 1 \OR \GCD\left(a,b\right)=1\\[1.5\jot]
+               \text{undefined}&\quad\text{if}\quad b = 0
+              \end{cases}
+\end{equation}
+
+ \begin{center}
+    \begin{lstlisting}[caption={Reducing a Rational},label=reducerat]
+int mpq_reduce(mp_rat *a){
+  mp_int gcd;
+  int e,sgn = mpq_get_sign(a);
+
+  /* check if num is zero -> return 0 if it is*/
+  if(mp_iszero(&a->numerator)){
+    mp_set_int(&a->numerator,0);
+    mp_set_int(&a->denominator,1);
+    mpq_set_sign(a,MP_ZPOS);
+    return MP_OKAY;
+  }
+  /* check if den is 1 -> return if it is*/
+  if(mp_isone(&a->denominator)){
+    return MP_OKAY;
+  }
+  /* check if den is zero -> return undefined if it is*/
+  if(mp_iszero(&a->denominator)){
+    mp_set_int(&a->numerator,0);
+    mp_set_int(&a->denominator,0);
+    a->sign = MP_ZPOS;
+    return MPQ_DIVISION_BY_ZERO;
+  }
+  /* check if den = num -> return 1 */
+  if(mpq_isone(a)){
+    mp_set_int(&a->numerator,1);
+    mp_set_int(&a->denominator,1);
+    return MP_OKAY;
+  }
+  mp_init(&gcd);
+
+  /* compute gcd(num,den) */
+  if( (e = mp_gcd(&a->numerator,&a->denominator,&gcd) ) != MP_OKAY){
+    return e;
+  }
+  if(mp_isone(&gcd)){
+    /* nothing to do */
+    return MP_OKAY;
+  }
+  /* set num to num/gcd */
+  if( (e = mp_div(&a->numerator,&gcd,&a->numerator,NULL) ) != MP_OKAY){
+    return e;
+  }
+  /* set den to den/gcd */
+  if( (e = mp_div(&a->denominator,&gcd,&a->denominator,NULL) ) != MP_OKAY){
+    return e;
+  }
+  /* not to forget: */
+  (&a->numerator)->sign = MP_ZPOS;
+  (&a->denominator)->sign = MP_ZPOS;
+  a->sign = sgn;
+  return MP_OKAY;
+}
+    \end{lstlisting}
+  \end{center}
+\chapter{Basic Inexact Arithmetic}
+\section{Epsilon $\epsilon$}
+The inexact arithmetic can be limitless and finite machines like most modern
+computers are do not like limitlessness. So we hereby and herewith introduce
+such a limit: epsilon, with its symbol, the greek letter of the same name:
+$\epsilon$.
+The dimension of $\epsilon$ is in most cases the number of digits a number
+is allowed to have. The digits are, also in most cases, decimal for the user
+and binary internally. Thus $\epsilon$ is an integer $>0$. In most cases.
+
+The actual size of $\epsilon$ is a question left to the user, how to reach
+that goal without overreaching it is a question left to the programmer.
+
+The first function is the one to set $\epsilon$. We need the amount of binary
+digits internally and have to calculate it from the amount of decimal digits
+given by the user. Adding a small slice of \textit{angstzuschlag} to it
+makes things more precise and gives the rounding function some leeway.
+Calculating the exact amount needed is complicated, but it is never more than a
+handfull. \lstinline!MPI_LOG2! is the base 2 logarithm of 10, about
+$3.322\ldots$.
+ \begin{center}
+    \begin{lstlisting}[caption={Set $\epsilon$},label=setepsrat]
+static int mpq_epsilon;
+void mpq_set_epsilon(int eps){
+   if(eps <= 0){
+     /* It might be more useful to
+        return an error */
+     mpq_epsilon = 0;
+   }
+   else{
+     /* eps assumed to be precision in number
+        of decimal digits */
+     mpq_epsilon =   (int)( (double)eps * MPI_LOG2) 
+                   + (int)log2( (double) eps);
+   }
+}
+    \end{lstlisting}
+  \end{center}
+Instead of letting the user reading the variable directly, we offer a function
+to do so.
+ \begin{center}
+    \begin{lstlisting}[caption={Read $\epsilon$},label=readepsrat]
+int mpq_get_epsilon(void){
+   return mpq_epsilon;
+}
+    \end{lstlisting}
+  \end{center}
+%\section{Rounding}
+\section{Square Root}
+Calculating the square root itself is not very complicated. We expand the fraction
+by twice the size of $\epsilon$ which has been made even. As long as both sides
+of the fraction gets expanded with the same amount, the actual number is of no
+interest, so we can use computationally cheap bitshifts.
+
+The algorithm itself is basically the same as the exponentiating algorithm but
+instead of having integer exponents we have the unit fraction $tfrac{1}{2}$ now.
+ \begin{center}
+    \begin{lstlisting}[caption={Square Root},label=sqrootrat]
+int mpq_sqrt(mp_rat *a, mp_rat *c){
+  int e;
+  if(mpq_isneg(a)){
+    return MP_VAL;
+  }
+  if( (e =  mpq_copy(a,c) ) != MP_OKAY){
+    return e;
+  }
+  int eps  =  mpq_get_epsilon();
+  if((eps & 0x1)){
+    eps++;
+  }
+  if( (e =  mp_mul_2d(&c->numerator,  eps<<1,
+                      &c->numerator) ) != MP_OKAY){
+    return e;
+  }
+  if( (e =  mp_mul_2d(&c->denominator,eps<<1,
+                      &c->denominator) ) != MP_OKAY){
+    return e;
+  }
+  if( (e =  mp_sqrt(&c->numerator,
+                    &c->numerator) ) != MP_OKAY){
+    return e;
+  }
+  if( (e =  mp_sqrt(&c->denominator,
+                    &c->denominator) ) != MP_OKAY){
+    return e;
+  }
+  // put rounding here
+  if( (e =   mpq_reduce(c) ) != MP_OKAY){
+    return e;
+  }
+  return MP_OKAY;
+}
+    \end{lstlisting}
+  \end{center}
+%\section{N\textsuperscript{th} Root}
+
+%\section{Logarithm Base E}
+%\section{Logarithm Base 2}
+%\section{Logarithm Base 10}
+
+\chapter{Functions with Rational Result}
+\section{Bernoulli Numbers}
+The Bernoulli numbers get calculated with the help of the tangent numbers. The
+algorithm is based on a paper by Richard P.~Brent and David Harvey
+(\cite{2011arXiv1108.0286B}). It is faster than the Akiyama-Tanigawa algorithm 
+(\cite{akiyama2001multiple})
+but does not involve any floating point calculations as other, still faster
+algorithm do like David Harvey multi-modular ansatz (\cite{2008arXiv0807.1347H})
+or by using the AGM as shown by Jonathan and Peter Borwein (\cite{borwein1987pi}).
+%TODO: explain the whole thing!
+ \begin{center}
+    \begin{lstlisting}[caption={Bernoulli Numbers by Tangent Numbers},label=bernrat]
+static unsigned long bern_array_size = 0;
+static mp_rat *bern_array;
+static int bhbern(unsigned long limit)
+{
+    mp_int tmp, A, U, E;
+    mp_rat *T;
+    unsigned long j, k, alloc_mem;
+    int e, counter = 0;
+
+    if (limit < bern_array_size) {
+        printf("Cache hit: %lu\n", limit);
+        return MP_OKAY;
+    }
+    alloc_mem = sizeof(mp_rat) * (limit + 2) * 2;
+    T = malloc(alloc_mem);
+    if (T == NULL) {
+        return MP_MEM;
+    }
+    /* For sake of simplicity */
+    bern_array = malloc(alloc_mem / 2 + 2);
+    if (bern_array == NULL) {
+        return MP_MEM;
+    }
+    /* This algorithm starts at B_2 = 1/6 */
+    /* B_0 = 1 */
+    if ((e = mpq_init(&bern_array[counter])) != MP_OKAY) {
+        return e;
+    }
+    if ((e = mpq_set_int(&bern_array[counter++],1,1)) != MP_OKAY) {
+        return e;
+    }
+    /* B_1 = -1/2 */
+    if ((e = mpq_init(&bern_array[counter])) != MP_OKAY) {
+        return e;
+    }
+    if ((e = mpq_set_int(&bern_array[counter],1,2)) != MP_OKAY) {
+        return e;
+    }
+    (bern_array[counter++]).sign = MP_NEG;
+    for (k = 0; k <= limit; k++) {
+        if ((e = mpq_init(&T[k])) != MP_OKAY) {
+            return e;
+        }
+    }
+    if ((e = mpq_set_int(&T[1], 1, 1)) != MP_OKAY) {
+        return e;
+    }
+    for (k = 2; k < limit; k++) {
+        /* T[k] = (k-1)*T[k-1] */
+        if ((e =
+             mp_mul_d(&T[k - 1].numerator, (k - 1),
+                      &T[k].numerator)) != MP_OKAY) {
+            return e;
+        }
+        if (((&T[k])->numerator).sign == MP_NEG) {
+            (T[k]).sign = MP_NEG;
+        }
+    }
+
+    if ((e = mp_init(&tmp)) != MP_OKAY) {
+        return e;
+    }
+
+    for (k = 2; k < limit - 1; k++) {
+        for (j = k; j < limit; j++) {
+            /* T[j] =  (j-k)*T[j-1]  +   (j-k+2)*T[j] */
+            /* tmp  =  (j-k)*T[j-1]  */
+            if ((e = mp_mul_d(&T[j - 1].numerator,
+                              (j - k), &tmp)) != MP_OKAY) {
+                return e;
+            }
+            /* T[j] =   (j-k+2)*T[j] */
+            if ((e = mp_mul_d(&T[j].numerator, (j - k + 2),
+                              &T[j].numerator)) != MP_OKAY) {
+                return e;
+            }
+            /* T[j] =   T[j]  + tmp */
+            if ((e = mp_add(&T[j].numerator, &tmp, 
+                            &T[j].numerator)) != MP_OKAY) {
+                return e;
+            }
+            if (((&T[k])->numerator).sign == MP_NEG) {
+                (T[k]).sign = MP_NEG;
+            }
+        }
+    }
+
+    if ((e = mp_init_multi(&E, &A, &U, NULL)) != MP_OKAY) {
+        return e;
+    }
+
+    /* E = -2; U = 1 */
+    if ((e = mp_set_int(&E, 2)) != MP_OKAY) {
+        return e;
+    }
+    if ((e = mp_neg(&E, &E)) != MP_OKAY) {
+        return e;
+    }
+
+    if ((e = mp_set_int(&U, 1)) != MP_OKAY) {
+        return e;
+    }
+
+    for (k = 1; k < limit - 1; k++) {
+        /* U = 4*U */
+        if ((e = mp_mul_d(&U, 4, &U)) != MP_OKAY) {
+            return e;
+        }
+
+        /*  A = U*(U-1) */
+        if ((e = mp_sub_d(&U, 1, &tmp)) != MP_OKAY) {
+            return e;
+        }
+
+        if ((e = mp_mul(&U, &tmp, &A)) != MP_OKAY) {
+            return e;
+        }
+
+        /* E = -E */
+        if ((e = mp_neg(&E, &E)) != MP_OKAY) {
+            return e;
+        }
+
+        /* result = (E*T[k]*k) / (A) */
+        if ((e = mp_mul_d(&E, k, &tmp)) != MP_OKAY) {
+            return e;
+        }
+
+        if ((e = mp_mul(&tmp, &T[k].numerator, 
+                        &tmp)) != MP_OKAY) {
+            return e;
+        }
+
+        if (((&T[k])->numerator).sign == MP_NEG) {
+            (T[k]).sign = MP_NEG;
+        }
+        if ((e = mpq_init(&bern_array[counter])) != MP_OKAY) {
+            return e
+        }
+        if ((e = mpq_set(&bern_array[counter++], 
+                         &tmp, &A)) != MP_OKAY) {
+            return e;
+        }
+
+    }
+    bern_array_size = counter;
+
+    /* It is deemed good style to clean up after work */
+    for (k = 0; k < limit; k++) {
+        mpq_clear(&T[k]);
+    }
+    free(T);
+    mp_clear_multi(&tmp, &E, &A, &U, NULL);
+    return MP_OKAY;
+}
+    \end{lstlisting}
+  \end{center}
+The wrapper, caring for checks, cache and return.
+ \begin{center}
+    \begin{lstlisting}[caption={Bernoulli Wrapper},label=bernratwrap]
+int bernoulli(unsigned long n, mp_rat * c)
+{
+    int e, k;
+    /* all odd Bernoulli numbers are zero except B_1 */
+    if ((n & 0x1) && n != 1) {
+        mpq_set_int(c, 0, 1);
+        return MP_OKAY;
+    }
+    if ((e = bhbern(n)) != MP_OKAY) {
+        return e;
+    }
+    /* It simplifies things a bit to get the exceptions 
+       out of the way first */
+    if (n < 2) {
+        if ((e = mpq_copy(&bern_array[n], c)) != MP_OKAY) {
+            return e;
+        }
+        return MP_OKAY;
+    }
+    k = n / 2 + 1;
+    if ((e = mpq_copy(&bern_array[k], c)) != MP_OKAY) {
+        return e;
+    }
+    return MP_OKAY;
+}
+    \end{lstlisting}
+  \end{center}
+It is always a sign of good style to clean up after the work!
+ \begin{center}
+    \begin{lstlisting}[caption={Free Bernoulli Array},label=freebernarray]
+void bernoulli_free()
+{
+    unsigned long i = 0;
+    for (; i < bern_array_size; i++) {
+        mpq_clear(&(bern_array[i]));
+    }
+    free(bern_array);
+}
+    \end{lstlisting}
+  \end{center}
+\section{Euler Numbers}
+The Euler numbers get calculated with the help of the secant numbers. The
+algorithm is based on a paper by Richard P.~Brent and David Harvey
+(\cite{2011arXiv1108.0286B}). It is actually the very same algorithm as for
+the Bernoulli numbers just much simpler. The Euler numbers are integers which
+makes the the very expensive reducing part--needing half or the run-time!--at
+the end of the Bernoulli algorithm superfluent.
+
+Both, Euler and Bernoulli numbers could be calculated at the same time saving
+about a third of the run-time (plus some overhead, of course) but the practical
+use of Bernoulli numbers in relation to Euler numbers is on average higher.
+
+The implementation is, because of the similarity of the algorithm very close to
+the implementation of the Bernoulli function.
+ \begin{center}
+    \begin{lstlisting}[caption={Fill Array with Euler Numbers},label=filleulerarr]
+static  unsigned long euler_array_size = 0;
+static  mp_int *euler_array;
+
+static int bheuler(unsigned long limit){
+  mp_int tmp;
+  unsigned long j,k,N;
+  int e;
+  N = limit+1;
+  if(N < euler_array_size){
+    //printf("Cache hit: %lu\n",N);
+    return MP_OKAY;
+  }
+  euler_array = malloc(sizeof(mp_int)*N+2);
+  if(euler_array == NULL){
+    return MP_MEM;
+  }
+  for(k=0; k<=N; k++) {
+    if( (e = mp_init(&euler_array[k])) != MP_OKAY){
+      return e;
+    }
+  }
+  if( (e = mp_set_int(&euler_array[0],1)) != MP_OKAY){
+    return e;
+  }
+  for(k = 1;k<N;k++){
+    /* euler_array[k] = (k)*euler_array[k-1] */
+    if( (e = mp_mul_d(&euler_array[k-1],(k),
+                      &euler_array[k])) != MP_OKAY){
+       return e;
+    }
+  }
+
+  if( (e =  mp_init(&tmp) ) != MP_OKAY){
+    return e;
+  }
+
+  for(k = 1;k<N;k++){
+    for(j = k+1;j< N;j++){
+      /* euler_array[j] =  (j-k)*euler_array[j-1]  
+                     +   (j-k+1)*euler_array[j] */
+      /* tmp  =  (j-k)*euler_array[j-1]  */
+      if( (e = mp_mul_d(&euler_array[j-1],(j-k),
+                        &tmp)) != MP_OKAY){
+        return e;
+      }
+       /* euler_array[j] = (j-k+1)*euler_array[j] */
+      if( (e = mp_mul_d(&euler_array[j],(j-k+1),
+                        &euler_array[j])) != MP_OKAY){
+        return e;
+      }
+      /* euler_array[j] =   euler_array[j]  + tmp*/
+       if( (e = mp_add(&euler_array[j],&tmp,
+                       &euler_array[j])) != MP_OKAY){
+        return e;
+      }
+    }
+  }
+  for(k = 0;k<N;k++){
+     /* Odd Euler numbers are negative */
+     if(k&0x1){
+         (euler_array[k]).sign = MP_NEG;
+     }
+  }
+  euler_array_size = N;
+  mp_clear(&tmp);
+  return MP_OKAY;
+}
+    \end{lstlisting}
+  \end{center}
+The wrapper is  bit different. The Euler numbers are integers and should be
+used as such. this resulted in two wrappers: one for integers and a smaller
+one for rationals.
+ \begin{center}
+    \begin{lstlisting}[caption={Wrapper for Euler Numbers},label=wrappeuler]
+int mp_euler_int(unsigned long n, mp_int * c){
+  int e,k;
+  /* all odd Euler numbers are zero */
+  if((n&0x1) && n != 1){
+    mp_set_int(c,0);
+    return MP_OKAY;
+  }
+  if( (e = bheuler(n/2) ) != MP_OKAY){
+    return e;
+  }
+  k = n/2;
+  if( (e = mp_copy(&euler_array[k],c) ) != MP_OKAY){
+    return e;
+  }
+  return MP_OKAY;
+}
+int mpq_euler(unsigned long n, mp_rat * c){
+  int e;
+  if( (e =  mp_euler_int(n,&c->numerator) ) != MP_OKAY){
+    return e;
+  }
+  return MP_OKAY;
+}
+    \end{lstlisting}
+  \end{center}
+As is the clearing of the Euler array.
+ \begin{center}
+    \begin{lstlisting}[caption={Free Euler Number Array},label=freeeulerarr]
+void mpq_euler_free(){
+  unsigned long i=0;
+  for(; i<euler_array_size; i++) {
+        mp_clear(&(euler_array[i]));
+  }
+  free(euler_array);
+}
+    \end{lstlisting}
+  \end{center}
+ 
+
+
+\lstlistoflistings
+\bibliographystyle{plain}
+\bibliography{czratbiblio}
+\end{document}
+
+
+
+

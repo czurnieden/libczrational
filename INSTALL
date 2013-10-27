@@ -1,0 +1,46 @@
+The build process uses qmake (http://en.wikipedia.org/wiki/Qmake) but not the
+QT library--the code is plain C-99. That means that it compiles, theoretically,
+with every compiler that understands C-99 (but none of the more exotic C-99
+specialties were used), on Unix, Windows and MacOS-X and qmake makes the
+building process much simpler overall, although a bit more complicated in
+detail and after a lot of time spend with qmake the author comes, slowly, to
+he conclusion, that qmake is bit _too_ simple.
+The other cross-platform option is cmake.
+
+  For Linux (prepared on Debian Squeeze)
+
+    make
+  optional (you'll need to be root for that)
+    make install
+    ldconfig
+
+  That will build, hopefully, static and dynamic libraries, the program
+    test_library
+  and, at your option, installs them. Yes, including the program, I haven't
+  found out how to avoid that part, yet.
+
+  If the installing does not work with the exception of the header file:
+  try entering individual sudirectories and do a 'qmake && make install'
+  there.
+
+
+  For other operating systems (including other Unixes)
+
+    qmake
+    make
+  optional (you'll need to be root/administrator for that)
+    make install
+    ldconfig
+
+  A lack of objects for tests makes the second approach rather untested but it
+  can be assumed that your are either a programmer who knows what to do or just
+  bold enough to compile your stuff yourself.
+
+Dependencies:
+  The author's fork of Libtommath at https://github.com/czurnieden/libtommath
+
+Documentation:
+  The documentation is in the directory ./doc as a PDF file and can be
+  rebuild with
+
+    make doc

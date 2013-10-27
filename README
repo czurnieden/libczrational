@@ -1,0 +1,21 @@
+This is the library "libczrational" offering some functions to calculate
+with fractions of arbitrary size. It uses Libtommath for the core multiple
+precision arithmetic with some extensions by the author. If the version at
+https://github.com/libtom/libtommath is not sufficient you'll need the author's
+version at https://github.com/czurnieden/libtommath which is downward compatible
+to the original Libtommath.
+
+  Included are functions to do
+
+    - basic exact arithmetic (x,-,*,/,^)
+    - basic inexact arithmetic (e.g.: square roots)
+    - integer functions (e.g.: Bernoulli and Euler numbers)
+
+Please refer to the documentation in the /doc directory for usage, to the
+file INSTALL for some remarks regarding building and installation and to the
+file LICENSE for some legal information (tl,dr: do with this software what
+you want as long as you put content of the file LICENSE into the packet when
+you distribute it. That's all.).
+
+This sentence gets deleted when the library is deemed useful by enough
+users.
