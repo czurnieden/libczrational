@@ -91,6 +91,12 @@ void mpq_exch(mp_rat *a, mp_rat *b );
 
 /* Last prime < 1000 */
 #define MPQ_DIVISION_BY_ZERO -997
+
+/* 
+   Some functions like the one implemented with the binary splitting algorithm
+   cannot return the error and set this variable instead.
+ */
+int errornumber;
 /*
   Reduce a fraction.
   Computes one GCD and two probably large divisions, so use with care.
