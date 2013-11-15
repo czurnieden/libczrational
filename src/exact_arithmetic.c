@@ -133,7 +133,7 @@ int mpq_sub(mp_rat * a, mp_rat * b, mp_rat * c)
 	return MP_OKAY;
     }
 
-    if (mpq_isinteger(a) && mpq_isinteger(a)) {
+    if (mpq_isinteger(a) = MP_YES && mpq_isinteger(b) == MP_YES) {
 	(&a->numerator)->sign = a->sign;
 	(&b->numerator)->sign = b->sign;
 	if ((e =
@@ -147,6 +147,34 @@ int mpq_sub(mp_rat * a, mp_rat * b, mp_rat * c)
 	}
 	return MP_OKAY;
     }
+
+    // a - b/c = (a*c - b)/c
+    if(mpq_isinteger(a)== MP_YES && mpq_isinteger(b) == MP_NO ){
+   	if ((e =
+	     mp_mul(&a->numerator, &b->denominator, &c->numerator)) != MP_OKAY) {
+	    return e;
+	}
+        if ((e =
+	     mp_sub(&b->numerator, &c->numerator, &c->numerator)) != MP_OKAY) {
+	    return e;
+	}
+        mp_copy(&b->denominator,&c->denominator);
+        goto end_sub;
+    }
+    // a/c - b = (a - b*c)/c
+    if(mpq_isinteger(a) == MP_NO && mpq_isinteger(b)== MP_YES ){
+   	if ((e =
+	     mp_mul(&b->numerator, &a->denominator, &c->numerator)) != MP_OKAY) {
+	    return e;
+	}
+        if ((e =
+	     mp_sub(&a->numerator, &c->numerator, &c->numerator)) != MP_OKAY) {
+	    return e;
+	}
+        mp_copy(&a->denominator,&c->denominator);
+        goto end_sub;
+    }
+
     /* let libtommath take care of the signs */
     (&a->numerator)->sign = a->sign;
     (&b->numerator)->sign = b->sign;
@@ -173,6 +201,7 @@ int mpq_sub(mp_rat * a, mp_rat * b, mp_rat * c)
     if ((e = mp_copy(&lcm, &c->denominator)) != MP_OKAY) {
 	return e;
     }
+end_sub:
     c->sign = (&c->numerator)->sign;
     (&a->numerator)->sign = MP_ZPOS;
     (&b->numerator)->sign = MP_ZPOS;
