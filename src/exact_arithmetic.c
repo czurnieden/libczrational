@@ -133,7 +133,7 @@ int mpq_sub(mp_rat * a, mp_rat * b, mp_rat * c)
 	return MP_OKAY;
     }
 
-    if (mpq_isinteger(a) = MP_YES && mpq_isinteger(b) == MP_YES) {
+    if (mpq_isinteger(a) == MP_YES && mpq_isinteger(b) == MP_YES) {
 	(&a->numerator)->sign = a->sign;
 	(&b->numerator)->sign = b->sign;
 	if ((e =
