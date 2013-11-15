@@ -182,7 +182,8 @@ int mpq_euler(unsigned long n, mp_rat * c);
 int mp_euler_int(unsigned long n, mp_int * c);
 /* clears and frees Euler-cache */
 void mpq_euler_free(void);
-
+/* Partial harmonic series */
+int mpq_harmonics(unsigned long n, mp_rat * c);
 /*******************************************************************************
    So far with the exact calculations. From now on a limit is introduced.
    There is no default value for it. Well, actually there is but it is zero.
