@@ -143,6 +143,8 @@ int mpq_sub(mp_rat *a, mp_rat *b, mp_rat *c);
 int mpq_mul(mp_rat *a, mp_rat *b, mp_rat *c);
 /* c = a / b */
 int mpq_div(mp_rat *a, mp_rat *b, mp_rat *c);
+/* c = a^2 */
+int mpq_sqr(mp_rat * a, mp_rat * c);
 
 /*Not defined if you use the original version of libtommath, so we try it here*/
 #ifndef DIGIT_SIZE
@@ -184,6 +186,7 @@ int mp_euler_int(unsigned long n, mp_int * c);
 void mpq_euler_free(void);
 /* Partial harmonic series */
 int mpq_harmonics(unsigned long n, mp_rat * c);
+
 /*******************************************************************************
    So far with the exact calculations. From now on a limit is introduced.
    There is no default value for it. Well, actually there is but it is zero.

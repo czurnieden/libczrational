@@ -407,3 +407,21 @@ int mpq_pow(mp_rat * a, mp_int * d, mp_rat * c)
     }
     return MP_OKAY;
 }
+
+int mpq_sqr(mp_rat * a, mp_rat * c)
+{
+  int e;
+  if ((e = mp_sqr(&a->numerator, &c->numerator)) != MP_OKAY) {
+    return e;
+  }
+  if ((e = mp_sqr(&a->denominator, &c->denominator)) != MP_OKAY) {
+    return e;
+  }
+  c->sign = MP_ZPOS;
+  /*
+  if ((e = mpq_reduce(c)) != MP_OKAY) {
+    return e;
+  }
+  */
+  return MP_OKAY;
+}
