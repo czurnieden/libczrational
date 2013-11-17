@@ -413,28 +413,29 @@ mp_rat *_harmonics1(unsigned long a, unsigned long b)
 {
   unsigned long m;
   mp_rat ta, tb;
+  int e;
   if (b - a == 1) {
     if ((e = mpq_set_int(&h_temp, (long) 1, (long) a)) != MP_OKAY) {
-      return e;
+      errornumber = MP_VAL;
     }
     return &h_temp;
   }
   m = (a + b) >> 1;
   if ((e = mpq_init_multi(&ta, &tb, NULL)) != MP_OKAY) {
-    return e;
+    errornumber = MP_VAL;
   }
 
-  mpq_exch(_harmonics(a, m), &ta);
-  mpq_exch(_harmonics(m, b), &tb);
+  mpq_exch(_harmonics1(a, m), &ta);
+  mpq_exch(_harmonics1(m, b), &tb);
 
   if ((e = mpq_add(&ta, &tb, &h_temp)) != MP_OKAY) {
-    return e;
+    errornumber = MP_VAL;
   }
   mpq_clear_multi(&ta, &tb, NULL);
   return &h_temp;
 }
 
-
+int PARTIAL_HARMONICS_CUTOFF = 21000;
 int mpq_harmonics(unsigned long n, mp_rat * c)
 {
   int e;
@@ -445,7 +446,7 @@ int mpq_harmonics(unsigned long n, mp_rat * c)
   if ((e = mpq_init(&h_temp)) != MP_OKAY) {
     return e;
   }
-  if (n < PARTIAL_HARMONICS_CUTOFF ) {
+  if (n < (unsigned long)PARTIAL_HARMONICS_CUTOFF ) {
     mpq_exch(_harmonics2(1, n + 1), c);
     if ((e = mpq_reduce(c)) != MP_OKAY) {
       return e;
