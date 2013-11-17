@@ -103,10 +103,12 @@ int mpq_add(mp_rat * a, mp_rat * b, mp_rat * c)
     if ((e = mp_copy(&lcm, &c->denominator)) != MP_OKAY) {
 	return e;
     }
+    mp_clear_multi(&lcm, &tmp1, &tmp2, &tmp3, &tmp4, NULL);
 end_add:
     c->sign = (&c->numerator)->sign;
     (&a->numerator)->sign = MP_ZPOS;
     (&b->numerator)->sign = MP_ZPOS;
+    (&c->numerator)->sign = MP_ZPOS;
     if ((e = mpq_reduce(c)) != MP_OKAY) {
 	return e;
     }
@@ -155,7 +157,7 @@ int mpq_sub(mp_rat * a, mp_rat * b, mp_rat * c)
 	    return e;
 	}
         if ((e =
-	     mp_sub(&b->numerator, &c->numerator, &c->numerator)) != MP_OKAY) {
+	     mp_sub(&c->numerator, &b->numerator, &c->numerator)) != MP_OKAY) {
 	    return e;
 	}
         mp_copy(&b->denominator,&c->denominator);
@@ -201,10 +203,12 @@ int mpq_sub(mp_rat * a, mp_rat * b, mp_rat * c)
     if ((e = mp_copy(&lcm, &c->denominator)) != MP_OKAY) {
 	return e;
     }
+    mp_clear_multi(&lcm, &tmp1, &tmp2, &tmp3, &tmp4, NULL);
 end_sub:
     c->sign = (&c->numerator)->sign;
     (&a->numerator)->sign = MP_ZPOS;
     (&b->numerator)->sign = MP_ZPOS;
+    (&c->numerator)->sign = MP_ZPOS;
     if ((e = mpq_reduce(c)) != MP_OKAY) {
 	return e;
     }
