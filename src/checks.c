@@ -100,11 +100,11 @@ int mpq_cmp(mp_rat * a, mp_rat * b)
     wdenb = (&b->denominator)->used;
     s1 = wnuma + wdenb;
     s2 = wnumb + wdena;
-    if (s1 < s2 - 1) {
-	return ((a->sign == MP_NEG) ? MP_ZPOS : MP_NEG);
+    if (s1 < s2 ) {
+	return ((a->sign == MP_NEG) ? MP_LT : MP_GT);
     }
-    if (s2 < s1 - 1) {
-	return ((a->sign == MP_NEG) ? MP_NEG : MP_ZPOS);
+    if (s2 < s1 ) {
+	return ((a->sign == MP_NEG) ? MP_GT : MP_LT);
     }
     /* This is gonna be brutal, so don't use cmp() frivolously! */
     mp_init_multi(&p1, &p2, NULL);
@@ -119,7 +119,7 @@ int mpq_cmp(mp_rat * a, mp_rat * b)
     e = mp_cmp(&p1, &p2);
     mp_clear_multi(&p1, &p2, NULL);
     if (a->sign == MP_NEG) {
-	return ((e == MP_ZPOS) ? MP_NEG : MP_ZPOS);
+	return ((e == MP_GT) ? MP_LT : MP_GT);
     }
     return e;
 }
