@@ -313,36 +313,26 @@ void mpq_euler_free(void)
 }
 
 
-#ifdef MP_28BIT
+#ifndef BN_MP_SET_WORD_C
+#define BN_MP_SET_WORD_C
+#if (MP_PREC > 1)
 int mp_set_word(mp_int * c, mp_word w)
 {
-  mp_digit t;
-
-  //mp_zero(c);
-  t = (mp_digit) w & MP_MASK;
-  c->dp[0] = 0;
-  c->dp[0] = t;
-  w >>= (DIGIT_BIT);
-  c->used = 1;
-  t = (mp_digit) w & MP_MASK;
-  if (w != 0) {
-    // MP_PREC is at least 8
-    c->dp[1] = 0;
-    c->dp[1] |= t;
-    c->used += 1;
-  } else {
+  mp_zero(c);
+  if (w == 0) {
     return MP_OKAY;
   }
-  w >>= (DIGIT_BIT);
-  t = (mp_digit) w & MP_MASK;
+  do {
+    c->dp[c->used++] = (mp_digit) w & MP_MASK;
+  } while ((w >>= DIGIT_BIT) > 0 && c->used < MP_PREC);
   if (w != 0) {
-    c->dp[2] = 0;
-    c->dp[2] |= t;
-    c->used += 1;
+    return MP_VAL;
   }
-  // mp_clamp (c);
   return MP_OKAY;
 }
+#else
+#   warning "MP_PREC" must be at least 2 (two), better 3 (three)
+#endif
 #endif
 
 static mp_rat h_temp;
@@ -376,13 +366,7 @@ mp_rat *_harmonics2(unsigned long a, unsigned long b)
   mp_exch(&tb.numerator, &r);
   mp_exch(&tb.denominator, &s);
 
-  /*
-   * A lot of time is spend in computing numbers of native sizes.
-   * If both numbers are a single mp_digit, the result will fit in a
-   * mp_word.
-   * Write mp_set_word()?
-   */
-#ifdef MP_28BIT
+#ifdef BN_MP_SET_WORD_C
   if ((&p)->used == 1 && (&s)->used == 1) {
     ps = (&p)->dp[0] * (mp_word) (&s)->dp[0];
     if ((e = mp_set_word(&ta.numerator, ps)) != MP_OKAY) {
@@ -425,16 +409,51 @@ mp_rat *_harmonics2(unsigned long a, unsigned long b)
   return &h_temp;
 }
 
+mp_rat *_harmonics1(unsigned long a, unsigned long b)
+{
+  unsigned long m;
+  mp_rat ta, tb;
+  if (b - a == 1) {
+    if ((e = mpq_set_int(&h_temp, (long) 1, (long) a)) != MP_OKAY) {
+      return e;
+    }
+    return &h_temp;
+  }
+  m = (a + b) >> 1;
+  if ((e = mpq_init_multi(&ta, &tb, NULL)) != MP_OKAY) {
+    return e;
+  }
+
+  mpq_exch(_harmonics(a, m), &ta);
+  mpq_exch(_harmonics(m, b), &tb);
+
+  if ((e = mpq_add(&ta, &tb, &h_temp)) != MP_OKAY) {
+    return e;
+  }
+  mpq_clear_multi(&ta, &tb, NULL);
+  return &h_temp;
+}
+
+
 int mpq_harmonics(unsigned long n, mp_rat * c)
 {
   int e;
+  /* What to do with zero? */
+  if(n == 0){
+    return MP_OKAY;
+  }
   if ((e = mpq_init(&h_temp)) != MP_OKAY) {
     return e;
   }
-  mpq_exch(_harmonics2(1, n + 1), c);
-  if ((e = mpq_reduce(c)) != MP_OKAY) {
-    return e;
+  if (n < PARTIAL_HARMONICS_CUTOFF ) {
+    mpq_exch(_harmonics2(1, n + 1), c);
+    if ((e = mpq_reduce(c)) != MP_OKAY) {
+      return e;
+    }
+  } else {
+    mpq_exch(_harmonics1(1, n + 1), c);
   }
   mpq_clear(&h_temp);
   return 1;
 }
+

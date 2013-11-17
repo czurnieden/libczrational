@@ -185,6 +185,7 @@ int mp_euler_int(unsigned long n, mp_int * c);
 /* clears and frees Euler-cache */
 void mpq_euler_free(void);
 /* Partial harmonic series */
+int PARTIAL_HARMONICS_CUTOFF = 21000;
 int mpq_harmonics(unsigned long n, mp_rat * c);
 
 /*******************************************************************************
