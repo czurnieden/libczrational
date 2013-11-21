@@ -242,6 +242,32 @@ int mpq_mul(mp_rat * a, mp_rat * b, mp_rat * c)
     return MP_OKAY;
 }
 
+int mpq_mul_d(mp_rat * a, long d, mp_rat * c)
+{
+    int e;
+    if (mp_iszero(&a->numerator) || d == 0) {
+        if ((e = mpq_set_int(c, 0, 1)) != MP_OKAY) {
+            return e;
+        }
+        c->sign = MP_ZPOS;
+        return MP_OKAY;
+    }
+
+    if ((e = mp_mul_d(&a->numerator, d, &c->numerator)) != MP_OKAY) {
+        return e;
+    }
+    if ((e = mpq_set_den(c, &a->denominator)) != MP_OKAY) {
+        return e;
+    }
+    if ((e = mpq_reduce(c)) != MP_OKAY) {
+        return e;
+    }
+  
+    c->sign = (   (a->sign == MP_NEG  && d > 0)
+               || (a->sign == MP_ZPOS && d < 0) ) ? MP_NEG : MP_ZPOS;
+    return MP_OKAY;
+}
+
 int mpq_div(mp_rat * a, mp_rat * b, mp_rat * c)
 {
     int e;
@@ -270,6 +296,29 @@ int mpq_div(mp_rat * a, mp_rat * b, mp_rat * c)
     return MP_OKAY;
 }
 
+int mpq_div_d(mp_rat * a, long d, mp_rat * c)
+{
+    int e;
+    if (mp_iszero(&a->numerator)) {
+	if ((e = mpq_set_int(c, 0, 1)) != MP_OKAY) {
+	    return e;
+	}
+	return MP_OKAY;
+    }
+    if (d == 0) {
+	return MPQ_DIVISION_BY_ZERO;
+    }
+
+    if ((e = mp_mul_d(&a->denominator, d, &c->denominator)) != MP_OKAY) {
+	return e;
+    }
+    if ((e = mpq_reduce(c)) != MP_OKAY) {
+	return e;
+    }
+    c->sign = (   (a->sign == MP_NEG  && d > 0)
+               || (a->sign == MP_ZPOS && d < 0) ) ? MP_NEG : MP_ZPOS;
+    return MP_OKAY;
+}
 
 int mpq_pow_d(mp_rat * a, long d, mp_rat * c)
 {
